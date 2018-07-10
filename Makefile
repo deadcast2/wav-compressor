@@ -1,6 +1,6 @@
 CC = x86_64-w64-mingw32-gcc
-CFLAGS = -std=c99 -Os -Wall -Wextra -Werror
-LDFLAGS = -s -nostdlib -mconsole
+CFLAGS = -std=c99 -Os -Wextra -Werror
+LDFLAGS = -s -mconsole
 LDLIBS = -lkernel32
 
 main.exe: main.c
