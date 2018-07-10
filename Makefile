@@ -3,7 +3,7 @@ CFLAGS = -std=c99 -O2
 LDFLAGS = -mconsole
 LDLIBS = -lkernel32
 
-main.exe: main.c
+wav-compressor.exe: main.c
 	$(CC) $(LDFLAGS) $(CFLAGS) main.c -o $@ $(LDLIBS)
 
 clean:
