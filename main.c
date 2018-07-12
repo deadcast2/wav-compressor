@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include "memmem.h"
+#include "fastlz.h"
 
 int encode(char *inputName, char *outputName)
 {
@@ -53,6 +54,7 @@ int strip(char *outputName)
   {
     fclose(file);
     HeapFree(GetProcessHeap(), 0, fileData);
+    HeapFree(GetProcessHeap(), 0, strippedData);
     return printf("fmt chunk not found\n");
   }
 
@@ -90,18 +92,65 @@ int strip(char *outputName)
     HeapFree(GetProcessHeap(), 0, strippedData);
     return printf("Could not write new stripped audio file\n");
   }
+  fclose(file);
 
   // Clean up
-  fclose(file);
   HeapFree(GetProcessHeap(), 0, fileData);
   HeapFree(GetProcessHeap(), 0, strippedData);
   return 1;
 }
 
+int compress(char *outputName)
+{
+  FILE *file = fopen(outputName, "rb");
+  if(file == NULL) return printf("Could not load stripped file\n");
+
+  // Get the total size of the audio file
+  fseek(file, 0, SEEK_END);
+  long size = ftell(file);
+  rewind(file);
+
+  // Read in all of the data to a buffer
+  BYTE *fileData = HeapAlloc(GetProcessHeap(), 0, size);
+  int bytesRead = fread(fileData, 1, size, file);
+  if(bytesRead != size)
+  {
+    fclose(file);
+    HeapFree(GetProcessHeap(), 0, fileData);
+    return printf("Error reading stripped file\n");
+  }
+  fclose(file);
+
+  // Compressed buffer must be at least 5% larger.
+  BYTE *compressedData = HeapAlloc(GetProcessHeap(), 0, size + (size * 0.05));
+  int bytesCompressed = fastlz_compress(fileData, size, compressedData);
+  if(bytesCompressed == 0) return printf("Error compressing stripped data\n");
+
+  // Annotate compressed data with uncompressed size.
+  int annotatedSize = bytesCompressed + sizeof(int);
+  BYTE *buffer = HeapAlloc(GetProcessHeap(), 0, annotatedSize);
+  CopyMemory(buffer, &size, sizeof(int));
+  CopyMemory(buffer + sizeof(int), compressedData, bytesCompressed);
+
+  // Write compressed file back out.
+  file = fopen(outputName, "wb");
+  if(file == NULL) return printf("Could not open compressed file\n");
+  int bytesWritten = fwrite(buffer, 1, annotatedSize, file);
+  if(bytesWritten != annotatedSize) return printf("Error writing compressed file");
+  fclose(file);
+
+  // Clean up
+  HeapFree(GetProcessHeap(), 0, buffer);
+  HeapFree(GetProcessHeap(), 0, compressedData);
+  HeapFree(GetProcessHeap(), 0, fileData);
+  return 1;
+}
+
 int main(int argc, char *argv[])
 {
-  if(argc < 3) return printf("Usage: main.exe input.wav output.wav\n");
+  if(argc < 3) return printf("Usage: wav-compressor input.wav output.wav\n");
   encode(argv[1], argv[2]);
   strip(argv[2]);
+  compress(argv[2]);
   return 0;
 }

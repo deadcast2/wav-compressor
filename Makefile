@@ -4,7 +4,7 @@ LDFLAGS = -mconsole
 LDLIBS = -lkernel32
 
 wav-compressor.exe: main.c
-	$(CC) $(LDFLAGS) $(CFLAGS) main.c -o $@ $(LDLIBS)
+	$(CC) $(LDFLAGS) $(CFLAGS) fastlz.c main.c -o $@ $(LDLIBS)
 
 clean:
 	rm -f *.exe *.o
