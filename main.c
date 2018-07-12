@@ -3,6 +3,20 @@
 #include "memmem.h"
 #include "fastlz.h"
 
+void clean(FILE *file, ...)
+{
+  va_list args;
+  va_start(args, file);
+  BYTE *nextHeap = va_arg(args, BYTE*);
+  while(nextHeap != 0)
+  {
+    HeapFree(GetProcessHeap(), 0, nextHeap);
+    nextHeap = va_arg(args, BYTE*);
+  }
+  va_end(args);
+  fclose(file);
+}
+
 int encode(char *inputName, char *outputName)
 {
   char buffer[MAX_PATH];
@@ -42,19 +56,17 @@ int strip(char *outputName)
   int bytesRead = fread(fileData, 1, size, file);
   if(bytesRead != size)
   {
-    fclose(file);
-    HeapFree(GetProcessHeap(), 0, fileData);
+    clean(file, fileData, 0);
     return printf("Error reading output file\n");
   }
+  clean(file, 0);
 
   // Locate the "fmt " chunk that stores the audio details
   BYTE *strippedData = HeapAlloc(GetProcessHeap(), 0, size);
   PVOID fmtChunk = memmem(fileData, size, "fmt ", sizeof(DWORD));
   if(fmtChunk == NULL)
   {
-    fclose(file);
-    HeapFree(GetProcessHeap(), 0, fileData);
-    HeapFree(GetProcessHeap(), 0, strippedData);
+    clean(file, fileData, strippedData, 0);
     return printf("fmt chunk not found\n");
   }
 
@@ -68,9 +80,7 @@ int strip(char *outputName)
   PVOID dataChunk = memmem(fileData, size, "data", sizeof(DWORD));
   if(dataChunk == NULL)
   {
-    fclose(file);
-    HeapFree(GetProcessHeap(), 0, fileData);
-    HeapFree(GetProcessHeap(), 0, strippedData);
+    clean(file, fileData, strippedData, 0);
     return printf("data chunk not found\n");
   }
 
@@ -81,22 +91,17 @@ int strip(char *outputName)
   CopyMemory(strippedData + totalFmtSize, dataChunk, totalDataSize);
 
   // Close output file and re-open for writing
-  fclose(file);
   file = fopen(outputName, "wb");
   int newFileSize = sizeof(DWORD) * 4 + fmtSize + dataSize;
   int bytesWritten = fwrite(strippedData, 1, newFileSize, file);
   if(bytesWritten != newFileSize)
   {
-    fclose(file);
-    HeapFree(GetProcessHeap(), 0, fileData);
-    HeapFree(GetProcessHeap(), 0, strippedData);
+    clean(file, fileData, strippedData, 0);
     return printf("Could not write new stripped audio file\n");
   }
-  fclose(file);
 
   // Clean up
-  HeapFree(GetProcessHeap(), 0, fileData);
-  HeapFree(GetProcessHeap(), 0, strippedData);
+  clean(file, fileData, strippedData, 0);
   return 1;
 }
 
@@ -115,16 +120,19 @@ int compress(char *outputName)
   int bytesRead = fread(fileData, 1, size, file);
   if(bytesRead != size)
   {
-    fclose(file);
-    HeapFree(GetProcessHeap(), 0, fileData);
+    clean(file, fileData, 0);
     return printf("Error reading stripped file\n");
   }
-  fclose(file);
+  clean(file, 0);
 
   // Compressed buffer must be at least 5% larger.
   BYTE *compressedData = HeapAlloc(GetProcessHeap(), 0, size + (size * 0.05));
   int bytesCompressed = fastlz_compress(fileData, size, compressedData);
-  if(bytesCompressed == 0) return printf("Error compressing stripped data\n");
+  if(bytesCompressed == 0)
+  {
+    clean(file, fileData, compressedData, 0);
+    return printf("Error compressing stripped data\n");
+  }
 
   // Annotate compressed data with uncompressed size.
   int annotatedSize = bytesCompressed + sizeof(int);
@@ -134,21 +142,26 @@ int compress(char *outputName)
 
   // Write compressed file back out.
   file = fopen(outputName, "wb");
-  if(file == NULL) return printf("Could not open compressed file\n");
+  if(file == NULL)
+  {
+    clean(file, fileData, compressedData, buffer, 0);
+    return printf("Could not open compressed file\n");
+  }
   int bytesWritten = fwrite(buffer, 1, annotatedSize, file);
-  if(bytesWritten != annotatedSize) return printf("Error writing compressed file");
-  fclose(file);
+  if(bytesWritten != annotatedSize)
+  {
+    clean(file, fileData, compressedData, buffer, 0);
+    return printf("Error writing compressed file");
+  }
 
   // Clean up
-  HeapFree(GetProcessHeap(), 0, buffer);
-  HeapFree(GetProcessHeap(), 0, compressedData);
-  HeapFree(GetProcessHeap(), 0, fileData);
+  clean(file, fileData, compressedData, buffer, 0);
   return 1;
 }
 
 int main(int argc, char *argv[])
 {
-  if(argc < 3) return printf("Usage: wav-compressor input.wav output.wav\n");
+  if(argc < 3) return printf("Usage: wav-compressor input.wav output.wav.lz\n");
   encode(argv[1], argv[2]);
   strip(argv[2]);
   compress(argv[2]);
