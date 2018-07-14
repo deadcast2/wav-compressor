@@ -161,7 +161,7 @@ int compress(char *outputName)
 
 int main(int argc, char *argv[])
 {
-  if(argc < 3) return printf("Usage: wav-compressor input.wav output.wav.lz\n");
+  if(argc < 3) return printf("Usage: %s input.wav output.wav.lz\n", argv[0]);
   encode(argv[1], argv[2]);
   strip(argv[2]);
   compress(argv[2]);
